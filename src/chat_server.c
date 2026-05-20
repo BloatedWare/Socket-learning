@@ -75,30 +75,17 @@ int main(int argc, char** argv) {
         exit(LISTEN_FAILED);
     }
 
-    printf("chat server open on port: %d...\n", server_port);
-
+    
     while (true) {
+        printf("chat server listening on port: %d...\n", server_port);
         int connection_sd = accept(sd, (struct sockaddr*)&client_address, &client_struct_len);//I can do this because i don't wanna store the client address and their port
         //will change this later
         if (connection_sd == -1) {
             printf("Failed to establish connection!\n");
             //decided to not exit because i don't think servers should crash because of one failed client connection
         } else {
-             
-            switch (fork()) {
-                case -1:
-                    printf("Failed to fork new process for client...aborting\n");
-                    //same reason as the above, no need to kill the server yet for 1 failed connection
-                    break;
-                case 0: 
-
-                    
-                    chat_service(connection_sd, client_address);
-                    break;
-                default:// I am parent
-                    printf("Connection established! :)\n");
-                    break;
-            }
+            printf("New connection established!\n");
+            chat_service(connection_sd, client_address); 
         }
 
     }
@@ -124,25 +111,24 @@ void chat_service(int connection_sd, struct sockaddr_in client_addr) {
     client_port = ntohs(client_addr.sin_port);//turns big endian back to little endian (forgot to add this last commit)
     printf("Client connected [IP: %s | PORT: %d ]\nTIP:'/exit' to end session\n", client_ip_str, client_port);
     //here i need to specifiy or implement the chatting feature :|
-    fflush(stdout);
 
     while(true) {
         //receiving client message, i think i will make client only send 1023 length msgs
         bytes_read = recv(connection_sd, client_buffer, MAX_BUFFER_SIZE-1, 0);
         
-        if(bytes_read < 0) {
-            printf("recv failed!\n");
+        if(bytes_read <= 0) {//recv returns 0 when session is closed
+            printf("recv failed or client ended session!\n");
             break;//this will exit the loop into close(connection_sd);
         } 
         //moved this here cuz of potential client_buffer[-1] -> segfault
         client_buffer[bytes_read] = '\0';//null terminate after last byte received
 
         printf("Client: %s\n", client_buffer);
-        fflush(stdout);
+
 
         if (!strncmp(client_buffer, "/exit", 5)) {//reads first 5 bytes and doesn't care what's after
             printf("Client ended session\n");
-            fflush(stdout);
+    
 
             break;//leave instantly, don' waste time waiting for server side input
         }
@@ -154,14 +140,14 @@ void chat_service(int connection_sd, struct sockaddr_in client_addr) {
             if (msg_length >= MAX_BUFFER_SIZE || msg_length <= 0) {
                 free(msg_to_send);//me no forget :'( so no memory leak
                 printf("message too long! ( 1 <= msg_length <= %d)\n", MAX_BUFFER_SIZE-1);
-                fflush(stdout);
+        
                 
                 continue;
             } else {
                 if (!strncmp(msg_to_send, "/exit", 5)) {
                     free(msg_to_send);//me no forget :'( so no memory leak
                     printf("Server ended session!\n");
-                    fflush(stdout);
+            
 
                     terminate_session = true;
                     break;

@@ -84,13 +84,13 @@ void chat_client(int sd) {
             if (msg_length >= MAX_BUFFER_SIZE || msg_length <= 0) {
                 free(msg_to_send);//me no forget :'( so no memory leak
                 printf("message too long! ( 1 <= msg_length <= %d)\n", MAX_BUFFER_SIZE-1);
-                fflush(stdout);
+                
                 continue;
             } else {
                 if (!strncmp(msg_to_send, "/exit", 5)) {
                     free(msg_to_send);//me no forget :'( so no memory leak
                     printf("Client ended session!\n");
-                    fflush(stdout);
+                    
 
                     terminate_session = true;
                     break;
@@ -101,7 +101,7 @@ void chat_client(int sd) {
                 bytes_sent = send(sd, msg_to_send, msg_length+1, 0);//msg_length + 1 cuz of \0, I think i don't need server_buff, 0 flag makes it behave like write
                 if (bytes_sent < 0) {
                     printf("send failed");//also potentially server closed
-                    fflush(stdout);
+                    
 
                     free(msg_to_send);
                     terminate_session = true;
@@ -123,15 +123,15 @@ void chat_client(int sd) {
         bytes_read = recv(sd, server_buffer, MAX_BUFFER_SIZE-1, 0);
         
         if(bytes_read <= 0) {
-            printf("recv failed!\n");
-            fflush(stdout);
+            printf("recv failed or server terminated session!\nDisconnected.\n");
+            
             break;//this will exit the loop into close(connection_sd); 0 means server vanished
         } 
         //moved this here cuz of potential client_buffer[-1] -> segfault
         server_buffer[bytes_read] = '\0';//null terminate after last byte received
 
         printf("Server: %s\n", server_buffer);
-        fflush(stdout);
+        
 
         if (!strncmp(server_buffer, "/exit", 5)) {//reads first 5 bytes and doesn't care what's after
             printf("Server ended session\n");
