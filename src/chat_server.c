@@ -12,6 +12,7 @@
 #define INSUFFICIENT_ARGS -12
 #define BIND_FAILED -13
 #define BAD_Q_LENGTH -14
+#define LISTEN_FAILED -15
 
 int get_port(const char* str) {
     int port;
@@ -80,24 +81,32 @@ int main(int argc, char** argv) {
         queue_length = get_q_length(argv[2]);
     } 
 
-    printf("port: %d, q_l= %d\n", port, queue_length);
 
-    // int sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    int sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-    // if (sd < 0) {
-    //     perror("socket");
-    //     exit(SOCKET_FAILED);
-    // }
+    if (sd < 0) {
+        perror("socket");
+        exit(SOCKET_FAILED);
+    }
 
 
-    // address.sin_family = AF_INET;
-    // address.sin_port = htons((u_int16_t)port);// port must be 16 bits AND in big endian, which our system stores in little endian
-    // address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);//macro for 127.0.0.1 in binary and htonl to convert to big endian (same as port)
+    address.sin_family = AF_INET;
+    address.sin_port = htons((u_int16_t)port);// port must be 16 bits AND in big endian, which our system stores in little endian
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);//macro for 127.0.0.1 in binary and htonl to convert to big endian (same as port)
 
-    // if (bind(sd, (struct sockaddr*)&address, sizeof(address)) != 0) {
-    //     perror("bind");
-    //     exit(BIND_FAILED);
-    // }
+    if (bind(sd, (struct sockaddr*)&address, sizeof(address)) != 0) {
+        perror("bind");
+        exit(BIND_FAILED);
+    }
+
+    if (listen(sd, queue_length) != 0) {
+        perror("listen");
+        exit(LISTEN_FAILED);
+    }
+
+    printf("chat server open on port: %d...\n", port);
+
+    close(sd);
 
     return 0;
 }
