@@ -32,9 +32,12 @@ int main(int argc, char** argv) {
     int queue_length = DEFAULT_QUEUE_LENGTH;
     int server_port;
     struct sockaddr_in server_address;
-
-    
     struct sockaddr_in client_address;//to capture client address
+
+    memset(&server_address, 0, sizeof(server_address));
+    memset(&client_address, 0, sizeof(server_address));
+    //these must be 0 initialized or the OS might drop them due to padding (a char array inside) being non 0 (idk)
+
     socklen_t client_struct_len = sizeof(client_address);//need as well for accept
     
 
@@ -121,6 +124,7 @@ void chat_service(int connection_sd, struct sockaddr_in client_addr) {
     client_port = ntohs(client_addr.sin_port);//turns big endian back to little endian (forgot to add this last commit)
     printf("Client connected [IP: %s | PORT: %d ]\nTIP:'/exit' to end session\n", client_ip_str, client_port);
     //here i need to specifiy or implement the chatting feature :|
+    fflush(stdout);
 
     while(true) {
         //receiving client message, i think i will make client only send 1023 length msgs
@@ -133,10 +137,13 @@ void chat_service(int connection_sd, struct sockaddr_in client_addr) {
         //moved this here cuz of potential client_buffer[-1] -> segfault
         client_buffer[bytes_read] = '\0';//null terminate after last byte received
 
-        printf("client: %s\n", client_buffer);
+        printf("Client: %s\n", client_buffer);
+        fflush(stdout);
 
         if (!strncmp(client_buffer, "/exit", 5)) {//reads first 5 bytes and doesn't care what's after
             printf("Client ended session\n");
+            fflush(stdout);
+
             break;//leave instantly, don' waste time waiting for server side input
         }
 
@@ -147,11 +154,15 @@ void chat_service(int connection_sd, struct sockaddr_in client_addr) {
             if (msg_length >= MAX_BUFFER_SIZE || msg_length <= 0) {
                 free(msg_to_send);//me no forget :'( so no memory leak
                 printf("message too long! ( 1 <= msg_length <= %d)\n", MAX_BUFFER_SIZE-1);
+                fflush(stdout);
+                
                 continue;
             } else {
                 if (!strncmp(msg_to_send, "/exit", 5)) {
                     free(msg_to_send);//me no forget :'( so no memory leak
                     printf("Server ended session!\n");
+                    fflush(stdout);
+
                     terminate_session = true;
                     break;
                 }
