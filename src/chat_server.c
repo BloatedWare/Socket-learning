@@ -22,9 +22,13 @@ void chats();// will define later
 
 int main(int argc, char** argv) {
     int queue_length = DEFAULT_QUEUE_LENGTH;
-    int port;
-    struct sockaddr_in address;
+    int server_port, client_port;
+    struct sockaddr_in server_address;
+    struct sockaddr_in client_address;//to capture client address
+    socklen_t client_struct_len = sizeof(client_address);//need as well for accept
+    char client_ip_str[INET_ADDRSTRLEN];//255.255.255.255 is 15 characters + \0 is 16
     char buffer[1024];
+    
     
 
     if (argc < 2 || argc > 3) {
@@ -32,7 +36,7 @@ int main(int argc, char** argv) {
         exit(INSUFFICIENT_ARGS);
     }
     
-    port = get_port(argv[1]);
+    server_port = get_port(argv[1]);
 
     if (argc == 3) {
         queue_length = get_q_length(argv[2]);
@@ -47,11 +51,11 @@ int main(int argc, char** argv) {
     }
 
 
-    address.sin_family = AF_INET;
-    address.sin_port = htons((u_int16_t)port);// port must be 16 bits AND in big endian, which our system stores in little endian
-    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);//macro for 127.0.0.1 in binary and htonl to convert to big endian (same as port)
+    server_address.sin_family = AF_INET;
+    server_address.sin_port = htons((u_int16_t)server_port);// port must be 16 bits AND in big endian, which our system stores in little endian
+    server_address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);//macro for 127.0.0.1 in binary and htonl to convert to big endian (same as port)
 
-    if (bind(sd, (struct sockaddr*)&address, sizeof(address)) != 0) {
+    if (bind(sd, (struct sockaddr*)&server_address, sizeof(server_address)) != 0) {
         perror("bind");
         exit(BIND_FAILED);
     }
@@ -61,10 +65,10 @@ int main(int argc, char** argv) {
         exit(LISTEN_FAILED);
     }
 
-    printf("chat server open on port: %d...\n", port);
+    printf("chat server open on port: %d...\n", server_port);
 
     while (true) {
-        int connection_sd = accept(sd, NULL, NULL);//I can do this because i don't wanna store the address and port of the dest_addr
+        int connection_sd = accept(sd, (struct sockaddr*)&client_address, &client_struct_len);//I can do this because i don't wanna store the client address and their port
         //will change this later
         if (connection_sd == -1) {
             printf("Failed to establish connection!\n");
@@ -77,6 +81,9 @@ int main(int argc, char** argv) {
                     //same reason as the above, no need to kill the server yet for 1 failed connection
                     break;
                 case 0: 
+                    inet_ntop(AF_INET, &(client_address.sin_addr), client_ip_str ,INET_ADDRSTRLEN);
+                    client_port = ntohs(client_address.sin_port);
+                    printf("Client connected [IP: %s | PORT: %d ]\n", client_ip_str, client_port);
                     //here i need to specifiy or implement the chatting feature :|
                     break;
                 default:// I am parent
