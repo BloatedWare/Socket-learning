@@ -16,6 +16,10 @@
 #define MALLOC_FAILED -17
 #define BAD_IP_ADDRESS -18
 #define CONNECT_FAILED -19
+#define SEND_FAILED -20
+#define SESSION_END -21
+#define RECV_FAILED -22
+
 
 //MARK:PROTOTYPES
 int get_port(const char* str);
@@ -74,73 +78,64 @@ void chat_client(int sd) {
 
     printf("TIP: /exit to end session!\n");
 
-
-    while(true) {
-        
-        while(true) {
-        //server side communication
-            msg_to_send = get_string("Client: ");//remember to free if you reach here
+    while (true) {
+        //the SEND loop
+        while (true) {
+            msg_to_send = get_string("Client: ");
             msg_length = strlen(msg_to_send);
-            if (msg_length >= MAX_BUFFER_SIZE || msg_length <= 0) {
-                free(msg_to_send);//me no forget :'( so no memory leak
-                printf("message too long! ( 1 <= msg_length <= %d)\n", MAX_BUFFER_SIZE-1);
-                
-                continue;
-            } else {
+            if (msg_length > 0 && msg_length < MAX_BUFFER_SIZE) {
+    
                 if (!strncmp(msg_to_send, "/exit", 5)) {
-                    free(msg_to_send);//me no forget :'( so no memory leak
-                    printf("Client ended session!\n");
-                    
-
-                    terminate_session = true;
-                    break;
-                }
-
-                //send to server
-               
-                bytes_sent = send(sd, msg_to_send, msg_length+1, 0);//msg_length + 1 cuz of \0, I think i don't need server_buff, 0 flag makes it behave like write
-                if (bytes_sent < 0) {
-                    printf("send failed");//also potentially server closed
-                    
-
                     free(msg_to_send);
-                    terminate_session = true;
-                    break;//exit the current loop
-                } 
-
-                free(msg_to_send);//free this array for now until next input
-                break;//terminate session will still be false so it will now look at client input once again
+                    printf("You have ended the session!\n");
+                    bytes_sent = send(sd,"/exit", 5,0);//send to client you want to end session (might remove later if the server's recv handles it)
+                    if (bytes_sent == -1) {//send failed or server closed
+                        perror("send");
+                        close(sd);
+                        exit(SEND_FAILED);
+                    }
+                    close(sd);
+                    exit(SESSION_END);
+                }
+                //will only reach here if user sent non /exit message
+                bytes_sent = send(sd, msg_to_send, msg_length, 0);//apprently once again \0 is not sent (convention?), PLUS i do add \0 anyway in the server side
                 
+                //in both cases, msg must be freed 
+                free(msg_to_send);
+                
+                if(bytes_sent == -1) {
+                    perror("send");
+                    close(sd);
+                    exit(SEND_FAILED);
+                }
+                break;
+                //will only reach here after data sent successfully, so recv needs it's turn hence 'break'
+            } else {
+                free(msg_to_send);//me no forget :'( so no memory leak
+                printf("BAD MESSAGE! ( 1 <= msg_length <= %d)\n", MAX_BUFFER_SIZE-1);
+                //will loop back if msg length isn't in our format
             }
         }
-
-        if(terminate_session) {
-            break;//leave while loop
-        }
-
-
-        //receiving client message, i think i will make client only send 1023 length msgs
-        bytes_read = recv(sd, server_buffer, MAX_BUFFER_SIZE-1, 0);
-        
-        if(bytes_read <= 0) {
-            printf("recv failed or server terminated session!\nDisconnected.\n");
-            
-            break;//this will exit the loop into close(connection_sd); 0 means server vanished
-        } 
-        //moved this here cuz of potential client_buffer[-1] -> segfault
-        server_buffer[bytes_read] = '\0';//null terminate after last byte received
-
-        printf("Server: %s\n", server_buffer);
-        
-
-        if (!strncmp(server_buffer, "/exit", 5)) {//reads first 5 bytes and doesn't care what's after
-            printf("Server ended session\n");
-            break;//leave instantly, don' waste time waiting for server side input
-        }
-
-    }
     
-    close(sd);//close connection socket
+        //the RECV phase
+        bytes_read = recv(sd, server_buffer, MAX_BUFFER_SIZE-1, 0);
+        if (bytes_read == -1) {
+            perror("recv");
+            close(sd);
+            exit(RECV_FAILED);
+        } 
+        
+        if (bytes_read == 0 || !strncmp(server_buffer, "/exit", 5)) {
+            printf("Client session ended.\n");
+            close(sd);
+            exit(SESSION_END);
+        }
+    
+        printf("\nServer: %s\n", server_buffer);
+        //'\n' before prompt is to avoid visual bugs like
+        //Client: Server (in the case where server sends twice (also good for concurrence))
+    }
+    //we will never reach here so no need for close(sd) here
 }
 
 int get_port(const char* str) {

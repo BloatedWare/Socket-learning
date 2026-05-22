@@ -75,9 +75,9 @@ int main(int argc, char** argv) {
         exit(LISTEN_FAILED);
     }
 
-    
+    printf("\n\n");
     while (true) {
-        printf("chat server listening on port: %d...\n", server_port);
+        printf("chat server listening on port: %d...\n[Ctrl+C] to exit\n", server_port);
         int connection_sd = accept(sd, (struct sockaddr*)&client_address, &client_struct_len);//I can do this because i don't wanna store the client address and their port
         //will change this later
         if (connection_sd == -1) {
