@@ -125,8 +125,10 @@ void chat_client(int sd) {
             exit(RECV_FAILED);
         } 
         
+        server_buffer[bytes_read] = '\0';//forgot to null terminate after successful read 
+
         if (bytes_read == 0 || !strncmp(server_buffer, "/exit", 5)) {
-            printf("Client session ended.\n");
+            printf("Disconnected from server.\n");
             close(sd);
             exit(SESSION_END);
         }

@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
-#define DEFAULT_QUEUE_LENGTH 10
+#define DEFAULT_QUEUE_LENGTH 1//since only 1 client at a time anyway
 #define MAX_Q_LENGTH 128
 #define MAX_BUFFER_SIZE 1024
 
@@ -18,11 +18,13 @@
 #define LISTEN_FAILED -15
 #define FORK_FAILED -16
 #define MALLOC_FAILED -17
-
+#define SEND_FAILED -20
+#define SESSION_END -21
+#define RECV_FAILED -22
 
 //MARK:PROTOTYPES
 int get_port(const char* str);
-int get_q_length(const char* str);
+// int get_q_length(const char* str);
 void chat_service(int sd, struct sockaddr_in client_addr);// will define later
 char *get_string(const char* prompt);
 
@@ -41,17 +43,18 @@ int main(int argc, char** argv) {
     socklen_t client_struct_len = sizeof(client_address);//need as well for accept
     
 
-    if (argc < 2 || argc > 3) {
-        printf("Usage: %s <port-number> [queue-length=%d]\n", argv[0], queue_length);
+    if (argc != 2) {
+        // printf("Usage: %s <port-number> [queue-length=%d]\n", argv[0], queue_length);
+        printf("Usage: %s <port-number>\n", argv[0]);
+
         exit(INSUFFICIENT_ARGS);
     }
     
     server_port = get_port(argv[1]);
 
-    if (argc == 3) {
-        queue_length = get_q_length(argv[2]);
-    } 
-
+    // if (argc == 3) {
+    //     queue_length = get_q_length(argv[2]);
+    // } 
 
     int sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
@@ -70,7 +73,7 @@ int main(int argc, char** argv) {
         exit(BIND_FAILED);
     }
 
-    if (listen(sd, queue_length) != 0) {
+    if (listen(sd, queue_length) != 0) {//honestly I added this for multiclient receptient but I m gonna comment this out for now
         perror("listen");
         exit(LISTEN_FAILED);
     }
@@ -112,68 +115,63 @@ void chat_service(int connection_sd, struct sockaddr_in client_addr) {
     printf("Client connected [IP: %s | PORT: %d ]\nTIP:'/exit' to end session\n", client_ip_str, client_port);
     //here i need to specifiy or implement the chatting feature :|
 
-    while(true) {
-        //receiving client message, i think i will make client only send 1023 length msgs
+    //RECV phase
+    while (true) {
         bytes_read = recv(connection_sd, client_buffer, MAX_BUFFER_SIZE-1, 0);
-        
-        if(bytes_read <= 0) {//recv returns 0 when session is closed
-            printf("recv failed or client ended session!\n");
-            break;//this will exit the loop into close(connection_sd);
-        } 
-        //moved this here cuz of potential client_buffer[-1] -> segfault
-        client_buffer[bytes_read] = '\0';//null terminate after last byte received
-
-        printf("Client: %s\n", client_buffer);
-
-
-        if (!strncmp(client_buffer, "/exit", 5)) {//reads first 5 bytes and doesn't care what's after
-            printf("Client ended session\n");
-    
-
-            break;//leave instantly, don' waste time waiting for server side input
+        if (bytes_read == -1) {
+            perror("recv");
+            close(connection_sd);
+            exit(RECV_FAILED);
         }
 
-        //server side communication
-        while(true) {
-            msg_to_send = get_string("Server: ");//remember to free if you reach here
-            msg_length = strlen(msg_to_send);
-            if (msg_length >= MAX_BUFFER_SIZE || msg_length <= 0) {
-                free(msg_to_send);//me no forget :'( so no memory leak
-                printf("message too long! ( 1 <= msg_length <= %d)\n", MAX_BUFFER_SIZE-1);
-        
-                
-                continue;
-            } else {
-                if (!strncmp(msg_to_send, "/exit", 5)) {
-                    free(msg_to_send);//me no forget :'( so no memory leak
-                    printf("Server ended session!\n");
-            
+        client_buffer[bytes_read] = '\0';//null terminate in both cases of recv == 0 or more
+        if (bytes_read == 0 || !strncmp(client_buffer, "/exit", 5)) {
+            printf("Client disconnected.\n");
+            close(connection_sd);
+            return;//again no need to exit here, server stays alive after client leaves
+        }
 
-                    terminate_session = true;
-                    break;
+        printf("\nClient: %s\n", client_buffer);
+
+
+        //SEND loop
+        while (true) {
+
+            msg_to_send = get_string("Server: ");
+            msg_length = strlen(msg_to_send);
+            
+            if (msg_length > 0 && msg_length < MAX_BUFFER_SIZE) {
+                if(!strncmp(msg_to_send, "/exit", 5)) {
+                    free(msg_to_send);
+                    printf("You have ended the session!\n");
+                    send(connection_sd, "/exit", 5, 0);
+                    if(bytes_read == -1) {
+                        perror("send");
+                        close(connection_sd);
+                        exit(SEND_FAILED);
+                    }
+                    close(connection_sd);
+                    return;
+                    //no need to exit (here :p)
                 }
 
-                //send to client
-                //i will later upgrade this to a version that is able to handle incomplete sends
-                bytes_sent = send(connection_sd, msg_to_send, msg_length+1, 0);//msg_length + 1 cuz of \0, I think i don't need server_buff, 0 flag makes it behave like write
-                if (bytes_sent < 0) {
-                    printf("send failed");
-                    free(msg_to_send);
-                    terminate_session = true;
-                    break;//exit the current loop
-                } 
-                free(msg_to_send);//free this array for now until next input
-                break;//terminate session will still be false so it will now look at client input once again
+                bytes_sent = send(connection_sd, msg_to_send, msg_length, 0);
+                free(msg_to_send);
+                if (bytes_read == -1) {
+                    perror("send");
+                    close(connection_sd);
+                    exit(SEND_FAILED);
+                }
+                break;//reaches if data sent successfully
+                
+            } else {
+                free(msg_to_send);//we get new pointer later
+                printf("BAD MESSAGE! ( 1 <= msg_length <= %d)\n", MAX_BUFFER_SIZE-1);
             }
         }
 
-        if(terminate_session) {
-            break;//leave while loop
-        }
-
-    };
-    
-    close(connection_sd);//close connection socket
+    }
+    //same as client, socket would already be closed at this point, make it work now, optimize later
 }
 
 int get_port(const char* str) {
@@ -199,30 +197,30 @@ int get_port(const char* str) {
     return port;
 }
 
-int get_q_length(const char* str) {
-   int q_length;
-    const char* str_head;
-    if (str == NULL) return BAD_PORT;
-    while (*str == ' ') str++;//skip white space
-    str_head = str;//point to first non white space char
+// int get_q_length(const char* str) {
+//    int q_length;
+//     const char* str_head;
+//     if (str == NULL) return BAD_PORT;
+//     while (*str == ' ') str++;//skip white space
+//     str_head = str;//point to first non white space char
 
-    do { //will return false for (+/-) which i want
-        if (!(*str >= '0' && *str <= '9')) {
-            printf("queue length: not a number!\n");
-            exit(BAD_Q_LENGTH);
-        } 
-        str++;
-    } while (*str != '\0');
-    q_length = atoi(str_head);
+//     do { //will return false for (+/-) which i want
+//         if (!(*str >= '0' && *str <= '9')) {
+//             printf("queue length: not a number!\n");
+//             exit(BAD_Q_LENGTH);
+//         } 
+//         str++;
+//     } while (*str != '\0');
+//     q_length = atoi(str_head);
 
-    if (q_length < 0 || q_length > MAX_Q_LENGTH) {
-        printf("queue length must be non negative and musn't surpass %d!\n", MAX_Q_LENGTH);
-        exit (BAD_Q_LENGTH); //we are only allowed from 1024 and up
-    }
+//     if (q_length < 0 || q_length > MAX_Q_LENGTH) {
+//         printf("queue length must be non negative and musn't surpass %d!\n", MAX_Q_LENGTH);
+//         exit (BAD_Q_LENGTH); //we are only allowed from 1024 and up
+//     }
     
 
-    return q_length; 
-}
+//     return q_length; 
+// }
 
 char *get_string(const char* prompt) {
     char *str = (char*)malloc(sizeof(char));//for '\0'
