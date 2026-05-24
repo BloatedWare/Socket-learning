@@ -210,30 +210,31 @@ void* recv_thread_entry(void* arg) {
 
 void* send_thread_entry(void* arg) {
     int sd = *(int*)arg;
-    char* client_msg;//renamed it to client msg, cuz i keep accidently free msg_length when i press TAB
+    char* server_msg;//renamed it to client msg, cuz i keep accidently free msg_length when i press TAB
     int msg_len;
     int bytes_sent = 0;
     while (true) {
         
-        client_msg = get_string(">>> ");
+        server_msg = get_string(">>> ");
         if(!recv_thread_alive) {
+            free(server_msg);
             send_thread_alive = false;  
             return NULL;
         }
-        msg_len = strlen(client_msg);
+        msg_len = strlen(server_msg);
         if (msg_len > 0 && msg_len < MAX_BUFFER_SIZE) {
-            bytes_sent = send(sd, client_msg, msg_len, 0);
+            bytes_sent = send(sd, server_msg, msg_len, 0);
             if (bytes_sent == -1) {
                 perror("send");
-                free(client_msg);
+                free(server_msg);
                 send_thread_alive = false;
                 close(sd);
                 *(int*)arg = -1;
                 return NULL;
             }
 
-            if (!strncmp(client_msg, "/exit", 5)) {
-                free(client_msg);
+            if (!strncmp(server_msg, "/exit", 5)) {
+                free(server_msg);
                 printf("You have ended the session!\n");
                 send_thread_alive = false;
                 close(sd);
@@ -244,7 +245,7 @@ void* send_thread_entry(void* arg) {
         } else {
             printf("BAD MESSAGE! ( 1 <= msg_length <= %d)\n", MAX_BUFFER_SIZE-1);
         }
-        free(client_msg);
+        free(server_msg);
 
     }
 }

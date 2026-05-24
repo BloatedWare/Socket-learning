@@ -183,6 +183,7 @@ void* send_thread_entry(void* arg) {
         
         client_msg = get_string(">>> ");
         if(!recv_thread_alive) {
+            free(client_msg);
             send_thread_alive = false;
             
             return NULL;
