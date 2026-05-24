@@ -19,6 +19,7 @@
 #define LISTEN_FAILED -15
 #define FORK_FAILED -16
 #define MALLOC_FAILED -17
+#define BAD_IP_ADDRESS -18
 #define SEND_FAILED -20
 #define SESSION_END -21
 #define RECV_FAILED -22
@@ -39,6 +40,7 @@ int send_thread_alive = false;
 int main(int argc, char** argv) {
     int queue_length = DEFAULT_QUEUE_LENGTH;
     int server_port;
+    int interface;
     struct sockaddr_in server_address;
     struct sockaddr_in client_address;//to capture client address
 
@@ -49,18 +51,26 @@ int main(int argc, char** argv) {
     socklen_t client_struct_len = sizeof(client_address);//need as well for accept
     
 
-    if (argc != 2) {
+    if (argc < 2 || argc > 3) {
         // printf("Usage: %s <port-number> [queue-length=%d]\n", argv[0], queue_length);
-        printf("Usage: %s <port-number>\n", argv[0]);
+        printf("Usage: %s <port-number> [ip-address]\n", argv[0]);
 
         exit(INSUFFICIENT_ARGS);
     }
     
     server_port = get_port(argv[1]);
 
-    // if (argc == 3) {
-    //     queue_length = get_q_length(argv[2]);
-    // } 
+
+    if (argc == 3) {
+
+        if (inet_pton(AF_INET, argv[2], &server_address.sin_addr) != 1 ) {
+            printf("Bad IP address!\n");
+            exit(BAD_IP_ADDRESS);
+        } 
+        
+    } else {
+        server_address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    }
 
     int sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
@@ -72,7 +82,7 @@ int main(int argc, char** argv) {
 
     server_address.sin_family = AF_INET;
     server_address.sin_port = htons((u_int16_t)server_port);// port must be 16 bits AND in big endian, which our system stores in little endian
-    server_address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);//macro for 127.0.0.1 in binary and htonl to convert to big endian (same as port)
+    // server_address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);//macro for 127.0.0.1 in binary and htonl to convert to big endian (same as port)
 
     if (bind(sd, (struct sockaddr*)&server_address, sizeof(server_address)) != 0) {
         perror("bind");
