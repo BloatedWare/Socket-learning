@@ -30,8 +30,6 @@ gcc -pthread src/chat_client.c -o bin/chat_client
 
 Because these programs need to run at the same time, you will need to open **two separate terminal windows**.
 
-> 💡 **Important Note:** The **client** is the one who gets to type first. Once both programs are running, switch to the client terminal to begin inputting data
- 
 ### Terminal 1
 In your first terminal, run the chat_server program along with a port number of your choosing range[1024 , 65535]:
 ```bash
